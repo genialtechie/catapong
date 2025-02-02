@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Cup Pong Game</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        background: #f2f2f2;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+      }
+      canvas {
+        background: #fff;
+        border: 1px solid #ccc;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas
+      id="gameCanvas"
+      width="800"
+      height="600"
+    ></canvas>
+    <script>
+      // Get the canvas and context
+      const canvas = document.getElementById('gameCanvas');
+      const ctx = canvas.getContext('2d');
+
+      // Ball properties
+      const ball = {
+        x: canvas.width / 2,
+        y: canvas.height - 50,
+        radius: 10,
+        vx: 0,
+        vy: 0,
+        isDragging: false,
+      };
+
+      // Define cups (arranged in a simple triangular layout)
+      const cups = [];
+      const cupRadius = 20;
+      const cupSpacing = 50;
+      const startX = canvas.width / 2 - cupSpacing;
+      const startY = 100;
+      // For simplicity, we create three cups in a triangle
+      cups.push({ x: startX, y: startY, hit: false });
+      cups.push({ x: startX + cupSpacing, y: startY, hit: false });
+      cups.push({
+        x: startX + cupSpacing / 2,
+        y: startY + cupSpacing,
+        hit: false,
+      });
+
+      // Variables for dragging the ball
+      let dragStart = null;
+
+      // Mouse event handlers for drag and release
+      canvas.addEventListener('mousedown', function (e) {
+        const rect = canvas.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+        // Check if the click is close enough to the ball
+        if (Math.hypot(mouseX - ball.x, mouseY - ball.y) < ball.radius + 5) {
+          ball.isDragging = true;
+          dragStart = { x: mouseX, y: mouseY };
+        }
+      });
+
+      canvas.addEventListener('mousemove', function (e) {
+        if (ball.isDragging) {
+          const rect = canvas.getBoundingClientRect();
+          const mouseX = e.clientX - rect.left;
+          const mouseY = e.clientY - rect.top;
+          // Update ball position to follow the drag
+          ball.x = mouseX;
+          ball.y = mouseY;
+        }
+      });
+
+      canvas.addEventListener('mouseup', function (e) {
+        if (ball.isDragging) {
+          const rect = canvas.getBoundingClientRect();
+          const mouseX = e.clientX - rect.left;
+          const mouseY = e.clientY - rect.top;
+          // Calculate drag distance and use it to set the ball's velocity
+          const dx = dragStart.x - mouseX;
+          const dy = dragStart.y - mouseY;
+          ball.vx = dx * 0.1; // adjust multiplier for power
+          ball.vy = dy * 0.1;
+          ball.isDragging = false;
+          dragStart = null;
+        }
+      });
+
+      // Physics parameters
+      const gravity = 0.2;
+      const wallFriction = 0.9; // friction on wall collisions
+      const damping = 0.99; // general damping for motion
+
+      // Update game state
+      function update() {
+        // Only update ball motion when not dragging
+        if (!ball.isDragging) {
+          // Apply gravity and update position
+          ball.vy += gravity;
+          ball.x += ball.vx;
+          ball.y += ball.vy;
+
+          // Apply damping to slow down the ball over time
+          ball.vx *= damping;
+          ball.vy *= damping;
+
+          // Bounce off left and right walls
+          if (ball.x + ball.radius > canvas.width) {
+            ball.x = canvas.width - ball.radius;
+            ball.vx = -ball.vx * wallFriction;
+          } else if (ball.x - ball.radius < 0) {
+            ball.x = ball.radius;
+            ball.vx = -ball.vx * wallFriction;
+          }
+
+          // Bounce off the top wall
+          if (ball.y - ball.radius < 0) {
+            ball.y = ball.radius;
+            ball.vy = -ball.vy * wallFriction;
+          }
+
+          // Bounce off the bottom wall
+          if (ball.y + ball.radius > canvas.height) {
+            ball.y = canvas.height - ball.radius;
+            ball.vy = -ball.vy * wallFriction;
+          }
+
+          // If the ball is moving very slowly near the bottom, reset it
+          if (
+            Math.abs(ball.vx) < 0.1 &&
+            Math.abs(ball.vy) < 0.1 &&
+            ball.y + ball.radius >= canvas.height - 1
+          ) {
+            resetBall();
+          }
+        }
+
+        // Check for collisions with cups
+        cups.forEach((cup) => {
+          if (
+            !cup.hit &&
+            circleCollision(
+              ball.x,
+              ball.y,
+              ball.radius,
+              cup.x,
+              cup.y,
+              cupRadius
+            )
+          ) {
+            cup.hit = true;
+            // Bounce the ball back with some energy loss
+            ball.vx = -ball.vx * wallFriction;
+            ball.vy = -ball.vy * wallFriction;
+          }
+        });
+      }
+
+      // Collision detection for circles
+      function circleCollision(x1, y1, r1, x2, y2, r2) {
+        const dx = x1 - x2;
+        const dy = y1 - y2;
+        return Math.hypot(dx, dy) < r1 + r2;
+      }
+
+      // Reset the ball position and velocity
+      function resetBall() {
+        ball.x = canvas.width / 2;
+        ball.y = canvas.height - 50;
+        ball.vx = 0;
+        ball.vy = 0;
+      }
+
+      // Draw the game elements
+      function draw() {
+        // Clear the canvas
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Draw cups
+        cups.forEach((cup) => {
+          ctx.beginPath();
+          ctx.arc(cup.x, cup.y, cupRadius, 0, Math.PI * 2);
+          ctx.fillStyle = cup.hit ? '#ddd' : '#ff4500'; // Mark hit cups in a different color
+          ctx.fill();
+          ctx.strokeStyle = '#333';
+          ctx.stroke();
+          ctx.closePath();
+        });
+
+        // Draw the ball
+        ctx.beginPath();
+        ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+        ctx.fillStyle = '#007aff';
+        ctx.fill();
+        ctx.strokeStyle = '#005bb5';
+        ctx.stroke();
+        ctx.closePath();
+
+        // If dragging, draw an aiming line from the drag start point to the current ball position
+        if (ball.isDragging && dragStart) {
+          ctx.beginPath();
+          ctx.moveTo(dragStart.x, dragStart.y);
+          ctx.lineTo(ball.x, ball.y);
+          ctx.strokeStyle = '#888';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+          ctx.closePath();
+        }
+      }
+
+      // Main game loop
+      function gameLoop() {
+        update();
+        draw();
+        requestAnimationFrame(gameLoop);
+      }
+
+      // Start the game loop
+      gameLoop();
+    </script>
+  </body>
+</html>
